@@ -1,7 +1,7 @@
-import { ExecutionContext } from "@cloudflare/workers-types";
+import type { ExecutionContext } from "@cloudflare/workers-types";
 import { trace } from "@opentelemetry/api";
 
-export type BaselimeLog = {
+export type Log = {
 	message: string;
 	error?: string;
 	requestId: string;
@@ -10,86 +10,54 @@ export type BaselimeLog = {
 	[key: string]: unknown;
 };
 
-export type BaselimeLoggerArgs = {
+export type LoggerArgs = {
 	ctx: ExecutionContext;
 	apiKey: string;
 	dataset?: string;
 	service?: string;
-	namespace?: string;
-	baselimeUrl?: string;
+	apiURL?: string;
 	flushAfterMs?: number;
 	flushAfterLogs?: number;
 	requestId?: string | null;
 	isLocalDev?: boolean;
 };
 
-// export interface Timestamp {
-// 	now(): number;
-// }
-export class SlowTimestamp {
-	async now() {
-		// @ts-ignore
-		await scheduler.wait(1);
-		return Date.now();
-	}
-}
+type LogLevel = "info" | "warning" | "error" | "debug";
 
-export class MonotonicTimestamp {
-	private monotonicTimestamp: number;
-	constructor() {
-		this.monotonicTimestamp = Date.now();
-	}
-
-	now() {
-		let timestamp = Date.now();
-		if (timestamp > this.monotonicTimestamp) {
-			this.monotonicTimestamp = timestamp + 1;
-		} else {
-			timestamp = this.monotonicTimestamp;
-			this.monotonicTimestamp += 1;
-		}
-		return timestamp;
-	}
-}
-
-export class BaselimeLogger {
+export class EdgeLogger {
 	private readonly ctx: ExecutionContext;
 	private readonly apiKey: string;
 	private readonly dataset: string;
-	private readonly service: string;
-	private readonly namespace: string;
-	private readonly logs: BaselimeLog[] = [];
+	private readonly service: string | undefined;
+	private readonly logs: Log[] = [];
 	private readonly requestId: string;
 	// flushTimeout is a timeout set by setTimeout() to flush the logs after a certain amount of time
 	private flushTimeout: NodeJS.Timeout | null = null;
 	private flushPromise: Promise<void> | null = null;
 	private flushAfterMs: number;
 	private flushAfterLogs: number;
-	private baselimeUrl: string;
+	private apiURL: string;
 	private isLocalDev: boolean;
-	private timestamp: MonotonicTimestamp;
 
-	constructor(args: BaselimeLoggerArgs) {
+	constructor(args: LoggerArgs) {
 		this.ctx = args.ctx;
 		this.apiKey = args.apiKey;
 		this.dataset = args.dataset ?? "edge-logger";
 		this.service = args.service;
-		this.namespace = args.namespace;
 		this.flushAfterMs = args.flushAfterMs ?? 10000;
 		this.flushAfterLogs = args.flushAfterLogs ?? 100;
-		this.baselimeUrl = args.baselimeUrl ?? "https://events.baselime.io/v1";
+		this.apiURL = args.apiURL ?? "https://api.axiom.co/v1";
 		if (args.requestId) {
 			this.requestId = args.requestId;
 		} else {
 			this.requestId = crypto.randomUUID();
 		}
-		this.isLocalDev = args.isLocalDev;
-		this.timestamp = new MonotonicTimestamp();
+		this.isLocalDev = args.isLocalDev ?? false;
 	}
 
 	private async _log(
 		message: string,
-		level: string,
+		level: LogLevel = "info",
 		data?: Record<string, unknown>,
 	) {
 		const span = trace.getActiveSpan();
@@ -114,11 +82,12 @@ export class BaselimeLogger {
 			return;
 		}
 
-		const log: BaselimeLog = {
+		const log: Log = {
 			message,
 			level: (data?.level as string) || level,
 			traceId,
-			timestamp: this.timestamp.now(),
+			_time: new Date().toISOString(),
+			service: this.service,
 			requestId: this.requestId,
 			...data,
 		};
@@ -174,29 +143,30 @@ export class BaselimeLogger {
 			const logsBody = JSON.stringify(this.logs);
 
 			try {
-				const res = await fetch(`${this.baselimeUrl}/${this.dataset}`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"x-api-key": this.apiKey,
-						"x-service": this.service,
-						"x-namespace": this.namespace,
+				const res = await fetch(
+					`${this.apiURL}/datasets/${this.dataset}/ingest`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${this.apiKey}`,
+						},
+						body: logsBody,
 					},
-					body: logsBody,
-				});
+				);
 				if (res.ok) {
 					// Remove the logs we sent
 					this.logs.splice(0, logsCount);
 					await res.arrayBuffer(); // Read the body to completion
 				} else {
 					console.log(
-						`Baselime failed to ingest logs: ${res.status} ${
+						`Axiom failed to ingest logs: ${res.status} ${
 							res.statusText
 						} ${await res.text()}`,
 					);
 				}
 			} catch (err) {
-				console.error(`Baselime failed to ingest logs: ${err}`);
+				console.error(`Axiom failed to ingest logs: ${err}`);
 			}
 		};
 
