@@ -218,33 +218,33 @@ Fully tested with:
 
 3. Use the EdgeLogger:
 
-```ts
-import { EdgeLogger } from './edge-logger'
+    ```ts
+    import { EdgeLogger } from './edge-logger'
 
-export interface Env {
-    AXIOM_TOKEN: string
-    AXIOM_DATASET: string
-}
+    export interface Env {
+        AXIOM_TOKEN: string
+        AXIOM_DATASET: string
+    }
 
-export default {
-    async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        const logger = new EdgeLogger({
-            ctx,
-            apiKey: env.AXIOM_TOKEN,
-            dataset: env.AXIOM_DATASET,
-            service: 'my-service',
-            requestId: crypto.randomUUID(),
-        })
+    export default {
+        async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+            const logger = new EdgeLogger({
+                ctx,
+                apiKey: env.AXIOM_TOKEN,
+                dataset: env.AXIOM_DATASET,
+                service: 'my-service',
+                requestId: crypto.randomUUID(),
+            })
 
-        // Use the EdgeLogger to log
-        logger.info('Hello, World!', { foo: 'bar' })
+            // Use the EdgeLogger to log
+            logger.info('Hello, World!', { foo: 'bar' })
 
-        // Make sure to add this to flush the logs to Axiom before the return statement
-        ctx.waitUntil(logger.flush())
-        return new Response('Request Completed')
-    },
-}
-```
+            // Make sure to add this to flush the logs to Axiom before the return statement
+            ctx.waitUntil(logger.flush())
+            return new Response('Request Completed')
+        },
+    }
+    ```
 
 > Note the `ctx.waitUntil(logger.flush());` before the return statement of the function.
 
