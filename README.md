@@ -264,12 +264,12 @@ To get logs appropriately formatted in your local development environment using 
 IS_LOCAL_MODE=1
 ```
 
-And use it when configuring the `BaselimeLogger`.
+And use it when configuring the `EdgeLogger`.
 
 ```typescript
 export default {
     async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        const logger = new BaselimeLogger({
+        const logger = new EdgeLogger({
             ctx,
             apiKey: env.BASELIME_KEY,
             isLocalDev: env.IS_LOCAL_DEV,
