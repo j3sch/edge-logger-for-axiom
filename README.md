@@ -271,7 +271,7 @@ export default {
     async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
         const logger = new EdgeLogger({
             ctx,
-            apiKey: env.BASELIME_KEY,
+            apiKey: env.AXIOM_TOKEN,
             isLocalDev: env.IS_LOCAL_DEV,
         })
 
